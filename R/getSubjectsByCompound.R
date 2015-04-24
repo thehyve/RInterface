@@ -25,7 +25,7 @@ getSubjectsByCompound <- function(directDatabaseConnection, compoundIDs = NULL, 
     .checkTransmartConnection()
     
     compounds <- .getMetadataTagsDirectlyFromDB(directDatabaseConnection)
-    compoundMatches <- na.omit(match(compoundIDs, compounds$tag))
+    compoundMatches <- which(compoundIDs == compounds$tag)
     if (is.null(study.names)) study.names <- getStudies()$id
     compoundConceptLinks <- c()
     for (study.name in study.names) {
