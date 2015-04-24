@@ -31,9 +31,9 @@ getSubjectsByCompound <- function(directDatabaseConnection, compoundIDs = NULL, 
     for (study.name in study.names) {
         studyConcepts <- getConcepts(study.name, cull.columns = F)
         result <- studyConcepts$api.link.self.href[match(compounds$path[compoundMatches], studyConcepts$fullName)]
-        if (length(result) > 0 && !is.null(result) && !is.na(result)) compoundConceptLinks <- c(compoundConceptLinks, result)
+        if (length(result) > 0 && !is.null(result) && !all(is.na(result))) compoundConceptLinks <- c(compoundConceptLinks, result)
     }
-        
+    compoundConceptLinks <- compoundConceptLinks[!is.na(compoundConceptLinks)]    
     .getSubjectsByConceptLinks(compoundConceptLinks)
 }
 
