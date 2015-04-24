@@ -1,3 +1,5 @@
+require("RPostgreSQL")
+
 # Setup connection to local transmart server and database
 connectToTransmart("http://localhost:8080/transmart")
 dbConnection <- dbConnect(PostgreSQL(), host = "localhost", port = "5432", user="timdo", password="timdo", dbname="transmart")
