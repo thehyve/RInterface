@@ -23,22 +23,22 @@
 
 getTreeForStudy <- function(study.name, addLowDimensionalData = FALSE, addHighDimensionalData = FALSE, orderOfProjections = "all_data") {
     .checkTransmartConnection()
-    
+
     # Get all concepts for this study and split the concept-paths by nodes
     concepts <- getConcepts(study.name)
     concepts <- concepts[order(concepts[ , 2]), ]
     conceptNodeNames <- strsplit(concepts[ , 2], "\\\\")
-    
+
     # Each concept's nodes needs to be put into a data-frame.
     # The number of columns need to be equal to the max number of concepts in a path
     noOfColumns <- max(unlist(lapply(conceptNodeNames, length)))
-    
+
     # Pad each list-element with empty elements up to the number of columns.
     conceptNodeNames <- lapply(conceptNodeNames, function(x) { x <- c(x, rep("", noOfColumns - length(x))) })
     # Prune the first nodes up to the studyname
     pruneTopNoNodes = match(toupper(study.name), toupper(conceptNodeNames[[1]]))
-    conceptNodeNames <- t(as.data.frame(conceptNodeNames, stringsAsFactors = FALSE))[, -c(0:pruneTopNoNodes)]    
-    
+    conceptNodeNames <- t(as.data.frame(conceptNodeNames, stringsAsFactors = FALSE))[, -c(0:pruneTopNoNodes)]
+
     # Construct the study's tree
     studyTree <- .addConceptsToTree(conceptNodeNames, concepts, addLowDimensionalData, addHighDimensionalData, orderOfProjections)
     studyTree
@@ -69,7 +69,7 @@ getTreeForStudy <- function(study.name, addLowDimensionalData = FALSE, addHighDi
         newTree[[cleanedNames[i]]][[reservedNames[1]]] <- metaData
         # Add function call or data to node
         if ("api.link.observations.href" %in% colnames(metaData) && !is.na(metaData$api.link.observations.href)) {
-            isLeaveNode <- length(rowsToAddToNewChildNode) == 1 && sum(conceptNodeNames[, ] != "") == 1
+            isLeaveNode <- length(rowsToAddToNewChildNode) == 1 && sum(conceptNodeNames[rowsToAddToNewChildNode, ] != "") == 1
             if (addLowDimensionalData && isLeaveNode) {
                 newTree[[cleanedNames[i]]][[reservedNames[4]]] <-  getObservations(concept.links = metaData$api.link.self.href)
             } else {
