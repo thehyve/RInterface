@@ -76,9 +76,9 @@ getHighdimData <- function(study.name, concept.match = NULL, concept.link = NULL
     } else { projection <- NULL }
 
     if (is.null(projection)) {
-        stop("No valid projection selected.\nSet the projection argument to one of the following options:\n",
+        warning("No valid projection selected.\nSet the projection argument to one of the following options:\n",
                 paste(listOfHighdimDataTypes$supportedProjections, "\n"))
-        return(NULL)
+        return(listOfHighdimDataTypes$supportedProjections)
     }
     message("Retrieving data from server. This can take some time, depending on your network connection speed. ",
             as.character(Sys.time()))
