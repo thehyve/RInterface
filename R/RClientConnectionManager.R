@@ -143,9 +143,16 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
 function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.progresscallback.download()) {
     if (any(accept.type == c("default", "hal"))) {
         if (accept.type == "hal") { httpHeaderFields <- c(httpHeaderFields, accept = "application/hal+json") }
+        h <- basicTextGatherer()
         result <- getURL(paste(sep="", transmartClientEnv$db_access_url, apiCall),
                 verbose = getOption("verbose"),
+                .opts = list(headerfunction = h$update),
                 httpheader = httpHeaderFields)
+        resultHeader <- parseHTTPHeader(h$value())
+        if (resultHeader[which(names(resultHeader)=="status")] != "200") {
+            message("There was a problem with your request to the server:")
+            print(resultHeader)
+        }
         if (getOption("verbose")) { message("Server response:\n\n", result, "\n") }
         if (is.null(result) || result == "null") { return(NULL) }
         result <- fromJSON(result, asText = TRUE, nullValue = NA)
