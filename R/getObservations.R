@@ -22,7 +22,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 getObservations <- function(study.name, concept.match = NULL, concept.links = NULL, as.data.frame = TRUE) {
-    .checkTransmartConnection()
+    if(!.checkTransmartConnection()) return(NULL)
 
     if (is.null(concept.links)) {
         if (!is.null(concept.match)) {
@@ -55,6 +55,7 @@ getObservations <- function(study.name, concept.match = NULL, concept.links = NU
                 accept.type = "hal") 
         listOfObservations <- c(listOfObservations, serverResult$observations)
     }
+    if (length(listOfObservations) == 0) return(NULL)
 
     if (as.data.frame) {
         dataFrameObservations <- .listToDataFrame(listOfObservations)
