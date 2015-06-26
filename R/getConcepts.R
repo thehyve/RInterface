@@ -26,6 +26,7 @@ getConcepts <- function(study.name, as.data.frame = TRUE, cull.columns = TRUE) {
     
     serverResult <- .transmartServerGetRequest(
             paste("/studies/", study.name, "/concepts", sep = ""), accept.type = "hal")
+    if (is.null(serverResult)) return(NULL)
     listOfConcepts <- serverResult$ontology_terms
     
     if (as.data.frame) {

@@ -55,6 +55,7 @@ getObservations <- function(study.name, concept.match = NULL, concept.links = NU
                 accept.type = "hal") 
         listOfObservations <- c(listOfObservations, serverResult$observations)
     }
+    if (length(listOfObservations) == 0) return(NULL)
 
     if (as.data.frame) {
         dataFrameObservations <- .listToDataFrame(listOfObservations)
