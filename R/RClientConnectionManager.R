@@ -123,7 +123,7 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
 }
 
 .transmartServerGetRequest <- function(apiCall, ...)  {
-    if (exists("access_token", envir = transmartClientEnv)) {
+    if (exists("access_token", envir = transmartClientEnv) && !is.na(transmartClientEnv$access_token)) {
         httpHeaderFields <- c(Authorization = paste("Bearer ", transmartClientEnv$access_token, sep=""))
     } else { httpHeaderFields <- "" }
 
