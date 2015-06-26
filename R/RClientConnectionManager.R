@@ -143,21 +143,23 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
 function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.progresscallback.download()) {
     if (any(accept.type == c("default", "hal"))) {
         if (accept.type == "hal") { httpHeaderFields <- c(httpHeaderFields, accept = "application/hal+json") }
+        result <- list()
         h <- basicTextGatherer()
-        result <- getURL(paste(sep="", transmartClientEnv$db_access_url, apiCall),
+        result$content <- getURL(paste(sep="", transmartClientEnv$db_access_url, apiCall),
                 verbose = getOption("verbose"),
                 .opts = list(headerfunction = h$update),
                 httpheader = httpHeaderFields)
-        resultHeader <- parseHTTPHeader(h$value())
-        if (resultHeader[which(names(resultHeader)=="status")] != "200") {
-            message("There was a problem with your request to the server:")
-            print(resultHeader)
-        }
+        result$header <- parseHTTPHeader(h$value())
         if (getOption("verbose")) { message("Server response:\n\n", result, "\n") }
-        if (is.null(result) || result == "null") { return(NULL) }
-        result <- fromJSON(result, asText = TRUE, nullValue = NA)
+        if (!result$header[which(names(result$header)=="status")] %in% c("200", "302")) {
+            message("There was a problem with your request to the server:")
+            message(result)
+            return(NULL)
+        }
+        if (is.null(result$content) || result$content == "null" || nchar(result$content) == 0) { return(NULL) }
+        result$content <- fromJSON(result$content, asText = TRUE, nullValue = NA)
         if (accept.type == "hal") { return(.simplifyHalList(result)) }
-        return(result)
+        return(result$content)
     } else if (accept.type == "binary") {
         progress$start(NA_integer_)
         result <- list()
@@ -171,6 +173,11 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
         result$header <- parseHTTPHeader(h$value())
         if (getOption("verbose")) {
             message(paste("Server binary response header:", as.character(data.frame(result$header)), "", sep="\n"))
+        }
+        if (!result$header[which(names(result$header)=="status")] %in% c("200", "302")) {
+            message("There was a problem with your request to the server:")
+            message(result)
+            return(NULL)
         }
         return(result)
     }
