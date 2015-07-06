@@ -27,13 +27,13 @@
 detach("package:transmartRClient")
 remove.packages("transmartRClient")
 # Remove manually declared functions
-rm(list = lsf.str())
+rm(list = lsf.str(all.names = T))
 #rm(list = ls(all.names = TRUE)) # optional: remove all other objects in current environment
 
 # Also, I have noticed the puzzling result that R sometimes sources old file versions when you reinstall directly (cache problem?)
 # Recommended to restart your R console at this point. Please let edit this file appropriatly if you know how to handle this issue more elegantly.
 # Then, reinstall package
-pathOfPackageSource <- "~/Projects/transmart-rclient/transmartRClient"
+pathOfPackageSource <- "~/Projects/transmartRClient"
 install.packages(pathOfPackageSource, repos = NULL, type = "source")
 
 
