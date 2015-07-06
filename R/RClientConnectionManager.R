@@ -32,9 +32,10 @@ function (transmartDomain, use.authentication = TRUE, ...) {
 
     if (use.authentication && !exists("access_token", envir = transmartClientEnv)) {
         authenticateWithTransmart(...)
-    } else { if (!use.authentication && exists("access_token", envir = transmartClientEnv)) {
-            remove("access_token", envir = transmartClientEnv)
-        }
+    } 
+    
+    if (!use.authentication) {
+        transmartClientEnv$access_token <- NA
     }
 
     if(!.checkTransmartConnection()) {
@@ -81,11 +82,10 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
             "&redirect_uri=", transmartClientEnv$oauthDomain,
             "/oauth/verify")
 
-    oauthResponse <- NULL
     tryCatch(oauthResponse <- getURL(oauth.exchange.token.url, verbose = getOption("verbose")), 
             error = function(e) {
-                if (getOption("verbose")) { message(e, "\n", oauthResponse) }
-                stop("Error with connection to verification server.") 
+                message(e)
+                stop("\nError with connection to verification server.")
             })
 
     if (grepl("access_token", oauthResponse)) {
@@ -94,15 +94,16 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
         cat("Authentication completed.\n")
     } else {
         cat("Authentication failed.\n")
+        if (getOption("verbose")) message(oauthResponse)
     }
 }
 
 .checkTransmartConnection <- function(reauthentice.if.invalid.token = TRUE) {
-    if (!exists("transmartClientEnv", envir = .GlobalEnv)) {
+    if (!exists("transmartClientEnv", envir = .GlobalEnv) || !exists("access_token", envir = transmartClientEnv)) {
         stop("No connection to tranSMART has been set up. For details, type: ?connectToTransmart")
     }
 
-    if (!exists("access_token", envir = transmartClientEnv)) {
+    if (exists("access_token", envir = transmartClientEnv) && is.na(transmartClientEnv$access_token)) {
         return(TRUE)
     }
 
@@ -122,7 +123,7 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
 }
 
 .transmartServerGetRequest <- function(apiCall, ...)  {
-    if (exists("access_token", envir = transmartClientEnv)) {
+    if (exists("access_token", envir = transmartClientEnv) && !is.na(transmartClientEnv$access_token)) {
         httpHeaderFields <- c(Authorization = paste("Bearer ", transmartClientEnv$access_token, sep=""))
     } else { httpHeaderFields <- "" }
 
@@ -142,14 +143,23 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
 function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.progresscallback.download()) {
     if (any(accept.type == c("default", "hal"))) {
         if (accept.type == "hal") { httpHeaderFields <- c(httpHeaderFields, accept = "application/hal+json") }
-        result <- getURL(paste(sep="", transmartClientEnv$db_access_url, apiCall),
+        result <- list()
+        h <- basicTextGatherer()
+        result$content <- getURL(paste(sep="", transmartClientEnv$db_access_url, apiCall),
                 verbose = getOption("verbose"),
+                .opts = list(headerfunction = h$update),
                 httpheader = httpHeaderFields)
+        result$header <- parseHTTPHeader(h$value())
         if (getOption("verbose")) { message("Server response:\n\n", result, "\n") }
-        if (is.null(result) || result == "null") { return(NULL) }
-        result <- fromJSON(result, asText = TRUE, nullValue = NA)
+        if (!result$header[which(names(result$header)=="status")] %in% c("200", "302")) {
+            message("There was a problem with your request to the server:")
+            message(result)
+            return(NULL)
+        }
+        if (is.null(result$content) || result$content == "null" || nchar(result$content) == 0) { return(NULL) }
+        result$content <- fromJSON(result$content, asText = TRUE, nullValue = NA)
         if (accept.type == "hal") { return(.simplifyHalList(result)) }
-        return(result)
+        return(result$content)
     } else if (accept.type == "binary") {
         progress$start(NA_integer_)
         result <- list()
@@ -163,6 +173,11 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
         result$header <- parseHTTPHeader(h$value())
         if (getOption("verbose")) {
             message(paste("Server binary response header:", as.character(data.frame(result$header)), "", sep="\n"))
+        }
+        if (!result$header[which(names(result$header)=="status")] %in% c("200", "302")) {
+            message("There was a problem with your request to the server:")
+            message(result)
+            return(NULL)
         }
         return(result)
     }

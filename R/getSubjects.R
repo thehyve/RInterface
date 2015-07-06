@@ -22,9 +22,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 getSubjects <- function(study.name, as.data.frame = TRUE) {
-    .checkTransmartConnection()
+    if(!.checkTransmartConnection()) return(NULL)
 
     serverResult <- .transmartServerGetRequest( paste("/studies/", study.name,"/subjects", sep=""), accept.type = "hal")
+    if (is.null(serverResult)) return(NULL)
     listOfSubjects <- serverResult$subjects
 
     subjectIDs <- sapply(listOfSubjects, FUN = function(x) { x[["id"]] })
