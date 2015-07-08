@@ -157,7 +157,7 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
             return(NULL)
         }
         if (is.null(result$content) || result$content == "null" || nchar(result$content) == 0) { return(NULL) }
-        result$content <- fromJSON(result$content, asText = TRUE, nullValue = NA)
+        result$content <- RJSONIO::fromJSON(result$content, asText = TRUE, nullValue = NA)
         if (accept.type == "hal") { return(.simplifyHalList(result$content)) }
         return(result$content)
     } else if (accept.type == "binary") {
