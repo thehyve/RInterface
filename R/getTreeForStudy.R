@@ -25,7 +25,7 @@ getTreeForStudy <- function(study.name, addLowDimensionalData = FALSE, addHighDi
     .checkTransmartConnection()
 
     # Get all concepts for this study and split the concept-paths by nodes
-    concepts <- getConcepts(study.name)
+    concepts <- getConcepts(study.name, cull.columns = F)
     concepts <- concepts[order(concepts[ , 2]), ]
     conceptNodeNames <- strsplit(concepts[ , 2], "\\\\")
 
@@ -53,7 +53,7 @@ getTreeForStudy <- function(study.name, addLowDimensionalData = FALSE, addHighDi
     # Do not add empty node names.
     nodesToAdd <- nodesToAdd[nodesToAdd != ""]
     # In addition to adding node names, we'll also be including all fetched metadata, for which we need to reserve a name.
-    reservedNames <- c("metaData", "getObservations", "getHighdimData", "observationData", "highdimData")
+    reservedNames <- c("conceptInfo", "getObservations", "getHighdimData", "observationData", "highdimData", "metaData", "fetchLSPCompoundInformation")
     # Each element in a list must have a name that can be used for "auto completion".
     # Simplification of names can lead to naming collision, so guarentee uniqueness, including with the reserved named.
     cleanedNames <- make.unique(c(reservedNames, make.names(nodesToAdd)))[-c(1:length(reservedNames))]
@@ -64,24 +64,36 @@ getTreeForStudy <- function(study.name, addLowDimensionalData = FALSE, addHighDi
         rowsToAddToNewChildNode <- which(conceptNodeNames[ , 1] == nodesToAdd[i])
         # Add these concepts to the subtree underneath this element
         newTree[[cleanedNames[i]]] <- .addConceptsToTree(conceptNodeNames[rowsToAddToNewChildNode, -1, drop = FALSE], concepts[rowsToAddToNewChildNode, , drop = FALSE], addLowDimensionalData, addHighDimensionalData, orderOfProjections)
-        # Add metadata of this node
-        metaData <- concepts[rowsToAddToNewChildNode[1], , drop = FALSE]
-        newTree[[cleanedNames[i]]][[reservedNames[1]]] <- metaData
+        # Add conceptInfo and metadata of this node
+        metaDataCols <- grep("^metadata\\.", colnames(concepts))
+        conceptInfo <- concepts[rowsToAddToNewChildNode[1], -metaDataCols, drop = FALSE]
+        newTree[[cleanedNames[i]]][[reservedNames[1]]] <- conceptInfo
+        metaData <- concepts[rowsToAddToNewChildNode[1], metaDataCols, drop = FALSE]
+        # metadata can be empty, so prune
+        metaData <- metaData[, !is.na(metaData), drop = FALSE]
+        colnames(metaData) <- gsub("^metadata\\.", "", colnames(metaData))
+        if (length(metaData) > 0) {
+            newTree[[cleanedNames[i]]][[reservedNames[6]]] <- metaData
+            LSPCompoundIdentifierTags <- c("Compound collaboratorId", "Compound compoundId")
+            if (all(LSPCompoundIdentifierTags %in% colnames(metaData))) {
+                newTree[[cleanedNames[i]]][[reservedNames[7]]] <- function(...) {require(LSPRClient); getCompound(metaData[[LSPCompoundIdentifierTags[1]]], metaData[[LSPCompoundIdentifierTags[2]]])}
+            }
+        }
         # Add function call or data to node
-        if ("api.link.observations.href" %in% colnames(metaData) && !is.na(metaData$api.link.observations.href)) {
+        if ("api.link.observations.href" %in% colnames(conceptInfo) && !is.na(conceptInfo$api.link.observations.href)) {
             isLeaveNode <- length(rowsToAddToNewChildNode) == 1 && sum(conceptNodeNames[rowsToAddToNewChildNode, ] != "") == 1
             if (addLowDimensionalData && isLeaveNode) {
-                newTree[[cleanedNames[i]]][[reservedNames[4]]] <-  getObservations(concept.links = metaData$api.link.self.href)
+                newTree[[cleanedNames[i]]][[reservedNames[4]]] <-  getObservations(concept.links = conceptInfo$api.link.self.href)
             } else {
-                newTree[[cleanedNames[i]]][[reservedNames[2]]] <- function(...) {getObservations(..., concept.links = metaData$api.link.self.href)}
+                newTree[[cleanedNames[i]]][[reservedNames[2]]] <- function(...) {getObservations(..., concept.links = conceptInfo$api.link.self.href)}
             }
-        } else if ("api.link.highdim.href" %in% colnames(metaData) && !is.na(metaData$api.link.highdim.href)) {
+        } else if ("api.link.highdim.href" %in% colnames(conceptInfo) && !is.na(conceptInfo$api.link.highdim.href)) {
             if (addHighDimensionalData) {
-                projectionOptions <- getHighdimData(concept.link = metaData$api.link.self.href)
+                projectionOptions <- getHighdimData(concept.link = conceptInfo$api.link.self.href)
                 projectionToUse <- projectionOptions[!is.na(match(projectionOptions, orderOfProjections))][1]
-                newTree[[cleanedNames[i]]][[reservedNames[5]]] <- getHighdimData(concept.link = metaData$api.link.self.href, projection = projectionToUse)
+                newTree[[cleanedNames[i]]][[reservedNames[5]]] <- getHighdimData(concept.link = conceptInfo$api.link.self.href, projection = projectionToUse)
             } else {
-                newTree[[cleanedNames[i]]][[reservedNames[3]]] <- function(...) {getHighdimData(..., concept.link = metaData$api.link.self.href)}
+                newTree[[cleanedNames[i]]][[reservedNames[3]]] <- function(...) {getHighdimData(..., concept.link = conceptInfo$api.link.self.href)}
             }
         }
     }
