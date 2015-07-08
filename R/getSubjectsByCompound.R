@@ -21,20 +21,36 @@
 # You should have received a copy of the GNU General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-getSubjectsByCompound <- function(directDatabaseConnection, compoundIDs = NULL, study.names = NULL) {
-    .checkTransmartConnection()
-    
-    compounds <- .getMetadataTagsDirectlyFromDB(directDatabaseConnection)
-    compoundMatches <- which(compoundIDs == compounds$tag)
-    if (is.null(study.names)) study.names <- getStudies()$id
-    compoundConceptLinks <- c()
-    for (study.name in study.names) {
-        studyConcepts <- getConcepts(study.name, cull.columns = F)
-        result <- studyConcepts$api.link.self.href[match(compounds$path[compoundMatches], studyConcepts$fullName)]
-        if (length(result) > 0 && !is.null(result) && !all(is.na(result))) compoundConceptLinks <- c(compoundConceptLinks, result)
+getCompoundConcepts <- function(collaboratorId = NULL, compoundId = NULL, studies = NULL) {
+    if (is.null(studies)) {
+        studies <- getStudies()$id
     }
-    compoundConceptLinks <- compoundConceptLinks[!is.na(compoundConceptLinks)]    
-    .getSubjectsByConceptLinks(compoundConceptLinks)
+    compoundConcepts <- NULL
+    for (study in studies) {
+        metaData <- .getMetadataTagsForStudy(study)
+        LSPCompoundIdentifierTags <- c("Compound collaboratorId", "Compound compoundId")
+        compoundIdentifierCols <- match(LSPCompoundIdentifierTags, colnames(metaData))
+        if (all(!is.na(compoundIdentifierCols))) {
+            if (is.null(collaboratorId)) { collaboratorIdMatches <- 1:nrow(metaData)
+            } else { collaboratorIdMatches <- which(metaData[ , compoundIdentifierCols[1]] %in% collaboratorId) }
+            if (is.null(compoundId)) { compoundIdMatches <- 1:nrow(metaData)
+            } else { compoundIdMatches <- which(metaData[ , compoundIdentifierCols[2]] %in% compoundId) }
+            new.compoundConcepts <- metaData[intersect(collaboratorIdMatches, compoundIdMatches), , drop = FALSE]
+            compoundConcepts <- rbind(compoundConcepts, new.compoundConcepts)
+        }
+    }
+    compoundConcepts
+}
+
+.getMetadataTagsForStudy <- function(study.name) {
+    concepts <- getConcepts(study.name, cull.columns = F)
+    metaDataCols <- grep("^metadata\\.", colnames(concepts))
+    conceptLinkCol <- match("api.link.self.href", colnames(concepts))
+    metaData <- concepts[ , c(conceptLinkCol, metaDataCols), drop = FALSE]
+    colnames(metaData) <- gsub("^metadata\\.", "", colnames(metaData))
+    # Keep only concepts with at least 1 metadata tag
+    metaData <- metaData[apply(metaData[ , -1, drop = FALSE], 1, function(x) any(!is.na(x))), ]
+    metaData
 }
 
 .getSubjectsByConceptLinks <- function(concept.links) {
@@ -48,13 +64,5 @@ getSubjectsByCompound <- function(directDatabaseConnection, compoundIDs = NULL, 
     }
     allSubjectsFound
 }
-
-.getMetadataTagsDirectlyFromDB <- function(dbConnection) {
-    compoundTagType <- "Compound collaborator ID"
-    compoundTags <- dbGetQuery(dbConnection, paste(sep = "","
-            select * from i2b2metadata.i2b2_tags where tag_type like '", compoundTagType, "';"))
-    compoundTags
-}
-
 
 

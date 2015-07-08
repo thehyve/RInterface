@@ -1,13 +1,26 @@
-require("RPostgreSQL")
 require("transmartRClient")
 
 # Setup connection to local transmart server and database
 connectToTransmart("http://lobster.nd4.thehyve.net/transmart")
-dbConnection <- dbConnect(PostgreSQL(), host = "localhost", port = "5433", user="tm_cz", password="tm_cz", dbname="transmart")
 
-# Fetch subjects with treatment-concepts linked to certain compound (across studies)
-getSubjectsByCompound(dbConnection, "c1")
-getSubjectsByCompound(dbConnection, "c2")
+# Fetch all concepts linked to a compound, for all accessible studies
+getCompoundConcepts()
 
-# Close connection to local database
-postgresqlCloseConnection(dbConnection)
+# Fetch list of all compounds for a certain collaboratorId within one study
+getCompoundConcepts(collaboratorId = "1", studies = "RA_NZEUSSEU_GSE36700")
+
+# Find specific compound across all studies
+getCompoundConcepts(collaboratorId = "1", compoundId = "2")
+
+
+# If you have an account with an LSP server, you can look up more detailed information on a compound
+require("LSPRClient")
+
+tokenFromWebClient <- "yourPersonalAPIToken"
+connectToLSP( 'https://location.to.your.server', tokenFromWebClient )
+
+# get compounds contained in your accessible studies of the transmart server you are connected to
+compoundsInTransmart <- getCompoundConcepts()
+
+# Get more information on the first compound from LSP
+getCompound(compoundsInTransmart$`Compound collaboratorId`[1], compoundsInTransmart$`Compound compoundId`[1])
