@@ -107,10 +107,10 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
         return(TRUE)
     }
 
-    ping <- .transmartServerGetRequest("/oauth/verify", accept.type = "default")
+    ping <- .transmartServerGetRequest("/oauth/inspectToken", accept.type = "default")
     if (getOption("verbose")) { message(paste(ping, collapse = ": ")) }
 
-    if (!is.null(ping)) {
+    if (!("token" %in% names(ping)) || !("expired" %in% names(ping$token)) || ping$token$expired) {
         if (reauthentice.if.invalid.token && grepl("^invalid_token", ping["error"])) {
             message("Authentication token not accepted.")
             authenticateWithTransmart(oauthDomain = transmartClientEnv$oauthDomain)
@@ -151,13 +151,13 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
                 httpheader = httpHeaderFields)
         result$header <- parseHTTPHeader(h$value())
         if (getOption("verbose")) { message("Server response:\n\n", result, "\n") }
+        if (is.null(result$content) || result$content == "null" || nchar(result$content) == 0) { return(NULL) }
+        result$content <- RJSONIO::fromJSON(result$content, asText = TRUE, nullValue = NA)
         if (!result$header[which(names(result$header)=="status")] %in% c("200", "302")) {
             message("There was a problem with your request to the server:")
             message(result)
-            return(NULL)
+            return(result$content)
         }
-        if (is.null(result$content) || result$content == "null" || nchar(result$content) == 0) { return(NULL) }
-        result$content <- RJSONIO::fromJSON(result$content, asText = TRUE, nullValue = NA)
         if (accept.type == "hal") { return(.simplifyHalList(result$content)) }
         return(result$content)
     } else if (accept.type == "binary") {
@@ -177,7 +177,7 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
         if (!result$header[which(names(result$header)=="status")] %in% c("200", "302")) {
             message("There was a problem with your request to the server:")
             message(result)
-            return(NULL)
+            return(result)
         }
         return(result)
     }
