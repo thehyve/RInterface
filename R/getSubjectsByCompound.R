@@ -55,7 +55,7 @@ getCompoundConcepts <- function(collaboratorId = NULL, compoundId = NULL, studie
     metaData
 }
 
-.getSubjectsByConceptLinks <- function(concept.links) {
+getSubjectsByConceptLinks <- function(concept.links) {
     allSubjectsFound <- data.frame()
     for (link in concept.links) {
         serverResult <- .transmartServerGetRequest( paste(link,"/subjects", sep=""), accept.type = "hal")
