@@ -30,6 +30,8 @@ getCompoundConcepts <- function(collaboratorId = NULL, compoundId = NULL, studie
         metaData <- .getMetadataTagsForStudy(study)
         LSPCompoundIdentifierTags <- c("Compound collaboratorId", "Compound compoundId")
         compoundIdentifierCols <- match(LSPCompoundIdentifierTags, colnames(metaData))
+        metaData <- metaData[ , c(1, compoundIdentifierCols), drop = FALSE]
+        metaData <- metaData[!apply(is.na(metaData[ , -1, drop = FALSE]), 1, all),]
         if (all(!is.na(compoundIdentifierCols))) {
             if (is.null(collaboratorId)) { collaboratorIdMatches <- 1:nrow(metaData)
             } else { collaboratorIdMatches <- which(metaData[ , compoundIdentifierCols[1]] %in% collaboratorId) }
