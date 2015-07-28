@@ -21,38 +21,26 @@
 # You should have received a copy of the GNU General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-.checkTransmartConnection <- function() {
-    ping <- .transmartServerGetRequest("/oauth/inspectToken", accept.type = "default")
-    if (getOption("verbose")) { message(paste(ping, collapse = ": ")) }
-
-    if (!("token" %in% names(ping)) || !("expired" %in% names(ping$token)) || ping$token$expired) {
-
-        message("Cannot connect to tranSMART database.")
-        return(FALSE)
-    }
-    return(TRUE)
-}
-
-.transmartServerGetRequest <- function(apiUrl, apiCall, auth_token, ...)  {
+.transmartServerGetRequest <- function(apiCall, auth_token, accept.type)  {
 
   httpHeaderFields <- c(Authorization = paste("Bearer ", auth_token, sep=""))
-  fullCall <- paste(apiUrl, apiCall, sep="")
+  fullCall <- paste("http://transmart-gb.thehyve.net/transmart", apiCall, sep="")
 
-  tryCatch(result <- .serverMessageExchange(fullCall, httpHeaderFields, ...),
-          error = function(e) {
-              message("Sorry, the R client was unable to carry out your request.",
-                      "Please make sure that the transmart server is still running. \n\n",
-                      "If the server is not down, you've encountered a bug.\n",
-                      "You can help fix it by contacting us. Type ?transmartRClient for contact details.\n",
-                      "Optional: type options(verbose = TRUE) and replicate the bug to find out more details.")
-              stop(e)
-          })
+  tryCatch(result <- .serverMessageExchange(fullCall, httpHeaderFields, accept.type),
+           error = function(e) {
+             message("Sorry, the R client was unable to carry out your request.",
+                     "Please make sure that the transmart server is still running. \n\n",
+                     "If the server is not down, you've encountered a bug.\n",
+                     "You can help fix it by contacting us. Type ?transmartRClient for contact details.\n",
+                     "Optional: type options(verbose = TRUE) and replicate the bug to find out more details.")
+             stop(e)
+           })
   result
 }
 
 .serverMessageExchange <-
-function(apiCall, httpHeaderFields, accept.type = "default") {
-    if (any(accept.type == c("default", "hal"))) {
+function(apiCall, httpHeaderFields, accept.type) {
+  if (any(accept.type == c("default", "hal"))) {
         if (accept.type == "hal") { httpHeaderFields <- c(httpHeaderFields, accept = "application/hal+json") }
         result <- list()
         h <- basicTextGatherer()
@@ -90,6 +78,7 @@ function(apiCall, httpHeaderFields, accept.type = "default") {
     }
     return(NULL)
 }
+
 
 .listToDataFrame <- function(list) {
     # TODO: (timdo) dependency on 'plyr' package removed; figure out whether dependency is present elsewhere, or remove dependency

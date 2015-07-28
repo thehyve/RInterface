@@ -21,30 +21,27 @@
 # You should have received a copy of the GNU General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-getConcepts <- function(apiUrl, auth.token, study.name, as.data.frame = TRUE, cull.columns = TRUE) {
+getConcepts <- function(auth.token, study.name, as.data.frame = TRUE, cull.columns = TRUE) {
 
-    if(!.checkTransmartConnection()) return(NULL)
+  serverResult <- .transmartServerGetRequest(
+    paste("/studies/", study.name, "/concepts", sep = ""), auth.token ,accept.type = "hal")
+  if (is.null(serverResult)) return(NULL)
+  listOfConcepts <- serverResult$ontology_terms
 
-    serverResult <- .transmartServerGetRequest(apiUrl,
-            paste("/studies/", study.name, "/concepts", sep = ""), auth.token, accept.type = "hal")
-    if (is.null(serverResult)) return(NULL)
-
-    listOfConcepts <- serverResult$ontology_terms
-
-    if (as.data.frame) {
-        dataFrameConcepts <- .listToDataFrame(listOfConcepts)
-        if (cull.columns) {
-            columnsToKeep <- match(c("name", "fullName", "api.link.self.href"), names(dataFrameConcepts))
-            if (any(is.na(columnsToKeep))) {
-                warning("There was a problem culling columns. You can try again with cull.columns = FALSE.")
-                message("Sorry. You've encountered a bug.\n",
-                        "You can help fix it by contacting us. Type ?transmartRClient for contact details.\n",
-                        "Optional: type options(verbose = TRUE) and replicate the bug to find out more details.")
-            }
-            return(dataFrameConcepts[, columnsToKeep])
-        }
-        return(dataFrameConcepts)
+  if (as.data.frame) {
+    dataFrameConcepts <- .listToDataFrame(listOfConcepts)
+    if (cull.columns) {
+      columnsToKeep <- match(c("name", "fullName", "api.link.self.href"), names(dataFrameConcepts))
+      if (any(is.na(columnsToKeep))) {
+        warning("There was a problem culling columns. You can try again with cull.columns = FALSE.")
+        message("Sorry. You've encountered a bug.\n",
+                "You can help fix it by contacting us. Type ?transmartRClient for contact details.\n",
+                "Optional: type options(verbose = TRUE) and replicate the bug to find out more details.")
+      }
+      return(dataFrameConcepts[, columnsToKeep])
     }
+    return(dataFrameConcepts)
+  }
 
-    listOfConcepts
+  listOfConcepts
 }

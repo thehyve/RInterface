@@ -42,50 +42,50 @@
 # lower level language.
 
 
-getHighdimData <- function(apiUrl, auth.token, study.name, concept.match = NULL, concept.link = NULL, projection = NULL) {
-    if(!.checkTransmartConnection()) return(NULL)
+getHighdimData <- function(auth.token, study.name, concept.match = NULL, concept.link = NULL, projection = NULL) {
 
-    if (is.null(concept.link) && !is.null(concept.match)) {
-        studyConcepts <- getConcepts(apiUrl, auth.token, study.name)
-        conceptFound <- grep(concept.match, studyConcepts$name)[1]
-        if (is.na(conceptFound)) {
-            warning(paste("No match found for:", concept.match))
-        } else { concept.link <- studyConcepts$api.link.self.href[conceptFound] }
-    }
 
-    if (length(concept.link) == 0L) {
-        warning("No concepts selected or found to match your arguments.")
-        return(NULL)
-    }
+  if (is.null(concept.link) && !is.null(concept.match)) {
+    studyConcepts <- getConcepts(auth.token, study.name)
+    conceptFound <- grep(concept.match, studyConcepts$name)[1]
+    if (is.na(conceptFound)) {
+      warning(paste("No match found for:", concept.match))
+    } else { concept.link <- studyConcepts$api.link.self.href[conceptFound] }
+  }
 
-    serverResult <- .transmartServerGetRequest(concept.link, "/highdim", auth.token, accept.type = "hal")
-    if (length(serverResult$dataTypes) == 0) {
-        warning("This high dimensional concept contains no data.")
-        return(NULL)
-    }
-    listOfHighdimDataTypes <- serverResult$dataTypes[[1]]
+  if (length(concept.link) == 0L) {
+    warning("No concepts selected or found to match your arguments.")
+    return(NULL)
+  }
 
-    if (!is.null(projection)) {
-        matchingProjectionIndex <- which(names(listOfHighdimDataTypes$api.link) == projection)
-        if (length(matchingProjectionIndex) > 0) {
-            projectionLink <- listOfHighdimDataTypes$api.link[[matchingProjectionIndex]]
-        } else { projection <- NULL }
+  serverResult <- .transmartServerGetRequest(paste(concept.link, "/highdim", sep=""), auth.token, accept.type = "hal")
+  if (length(serverResult$dataTypes) == 0) {
+    warning("This high dimensional concept contains no data.")
+    return(NULL)
+  }
+  listOfHighdimDataTypes <- serverResult$dataTypes[[1]]
+
+  if (!is.null(projection)) {
+    matchingProjectionIndex <- which(names(listOfHighdimDataTypes$api.link) == projection)
+    if (length(matchingProjectionIndex) > 0) {
+      projectionLink <- listOfHighdimDataTypes$api.link[[matchingProjectionIndex]]
     } else { projection <- NULL }
+  } else { projection <- NULL }
 
-    if (is.null(projection)) {
-        warning("No valid projection selected.\nSet the projection argument to one of the following options:\n",
-                paste(listOfHighdimDataTypes$supportedProjections, "\n"))
-        return(listOfHighdimDataTypes$supportedProjections)
-    }
-    message("Retrieving data from server. This can take some time, depending on your network connection speed. ",
-            as.character(Sys.time()))
-    serverResult <- .transmartServerGetRequest(projectionLink, accept.type = "binary")
-    if (length(serverResult$content) == 0) {
-        warning("No data could be found. The server yielded an empty dataset. Returning NULL.")
-        return(NULL)
-    }
+  if (is.null(projection)) {
+    warning("No valid projection selected.\nSet the projection argument to one of the following options:\n",
+            paste(listOfHighdimDataTypes$supportedProjections, "\n"))
+    return(listOfHighdimDataTypes$supportedProjections)
+  }
+  message("Retrieving data from server. This can take some time, depending on your network connection speed. ",
+          as.character(Sys.time()))
+  serverResult <- .transmartServerGetRequest(projectionLink, auth.token, accept.type = "binary")
+  if (length(serverResult$content) == 0) {
+    warning("No data could be found. The server yielded an empty dataset. Returning NULL.")
+    return(NULL)
+  }
 
-    return(.parseHighdimData(serverResult$content))
+  return(.parseHighdimData(serverResult$content))
 }
 
 .parseHighdimData <-
