@@ -21,12 +21,11 @@
 # You should have received a copy of the GNU General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>..
 
-getStudies <- function(name.match = "", as.data.frame = TRUE, cull.columns = TRUE) {
-    .checkTransmartConnection()
+getStudies <- function(apiUrl, auth.token, name.match = "", as.data.frame = TRUE, cull.columns = TRUE) {
 
-    serverResult <- .transmartServerGetRequest("/studies", accept.type = "hal")
+    serverResult <- .transmartServerGetRequest(apiUrl, "/studies", auth.token, accept.type = "hal")
     listOfStudies <- serverResult$studies
-    
+
     studyNames <- sapply(listOfStudies, FUN = function(x) { x[["id"]] })
     names(listOfStudies) <- studyNames
     listOfStudies <- listOfStudies[ grep(name.match, studyNames) ]
@@ -38,13 +37,13 @@ getStudies <- function(name.match = "", as.data.frame = TRUE, cull.columns = TRU
             if (any(is.na(columnsToKeep))) {
                 warning("There was a problem culling columns. You can try again with cull.columns = FALSE.")
                 message("Sorry. You've encountered a bug.\n",
-                        "You can help fix it by contacting us. Type ?transmartRClient for contact details.\n", 
+                        "You can help fix it by contacting us. Type ?transmartRClient for contact details.\n",
                         "Optional: type options(verbose = TRUE) and replicate the bug to find out more details.")
             }
             return(dataFrameStudies[ , columnsToKeep])
         }
         return(dataFrameStudies)
     }
-    
+
     listOfStudies
 }

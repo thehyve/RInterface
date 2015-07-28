@@ -21,13 +21,14 @@
 # You should have received a copy of the GNU General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-getConcepts <- function(study.name, as.data.frame = TRUE, cull.columns = TRUE) {
+getConcepts <- function(apiUrl, auth.token, study.name, as.data.frame = TRUE, cull.columns = TRUE) {
+
     .checkTransmartConnection()
-    
-    serverResult <- .transmartServerGetRequest(
-            paste("/studies/", study.name, "/concepts", sep = ""), accept.type = "hal")
+
+    serverResult <- .transmartServerGetRequest(apiUrl,
+            paste("/studies/", study.name, "/concepts", sep = ""), auth.token, accept.type = "hal")
     listOfConcepts <- serverResult$ontology_terms
-    
+
     if (as.data.frame) {
         dataFrameConcepts <- .listToDataFrame(listOfConcepts)
         if (cull.columns) {
@@ -42,6 +43,6 @@ getConcepts <- function(study.name, as.data.frame = TRUE, cull.columns = TRUE) {
         }
         return(dataFrameConcepts)
     }
-    
+
     listOfConcepts
-} 
+}

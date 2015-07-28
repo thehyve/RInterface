@@ -23,33 +23,30 @@
 
 
 # Performance notes
-# 
-# Downloading and parsing large data sets of high dimensional data can take a 
-# significant amount of time (minutes for several 100 mb). We have attempted to 
+#
+# Downloading and parsing large data sets of high dimensional data can take a
+# significant amount of time (minutes for several 100 mb). We have attempted to
 # optimize the process a reasonable amount.
-# 
-# The current RCurl wrapper doesn't expose functionality to download a binary 
-# url and process the chunks asynchronously as they come in (that is only 
-# supported for text urls). Doing the downloading and parsing at the same time 
+#
+# The current RCurl wrapper doesn't expose functionality to download a binary
+# url and process the chunks asynchronously as they come in (that is only
+# supported for text urls). Doing the downloading and parsing at the same time
 # should give a significant improvement, but that would require changes in RCurl
 # or a different way of downloading the data.
-# 
+#
 # The parser has also been optimized up to the level that the R code itself only
-# takes a minority of the runtime. The most time consuming operations are the 
-# foreign function calls to retrieve the fields from messages and to construct 
-# objects to parse the varint32 preceding each message. Significant further 
-# optimization of the parser would probably require dropping to C or another 
+# takes a minority of the runtime. The most time consuming operations are the
+# foreign function calls to retrieve the fields from messages and to construct
+# objects to parse the varint32 preceding each message. Significant further
+# optimization of the parser would probably require dropping to C or another
 # lower level language.
 
 
-getHighdimData <- function(study.name, concept.match = NULL, concept.link = NULL, projection = NULL,
-        progress.download = .make.progresscallback.download(),
-        progress.parse = .make.progresscallback.parse()) {
-
+getHighdimData <- function(apiUrl, auth.token, study.name, concept.match = NULL, concept.link = NULL, projection = NULL) {
     .checkTransmartConnection()
 
     if (is.null(concept.link) && !is.null(concept.match)) {
-        studyConcepts <- getConcepts(study.name)
+        studyConcepts <- getConcepts(apiUrl, auth.token, study.name)
         conceptFound <- grep(concept.match, studyConcepts$name)[1]
         if (is.na(conceptFound)) {
             warning(paste("No match found for:", concept.match))
@@ -61,7 +58,7 @@ getHighdimData <- function(study.name, concept.match = NULL, concept.link = NULL
         return(NULL)
     }
 
-    serverResult <- .transmartServerGetRequest(paste(concept.link, "/highdim", sep=""), accept.type = "hal")
+    serverResult <- .transmartServerGetRequest(concept.link, "/highdim", auth.token, accept.type = "hal")
     if (length(serverResult$dataTypes) == 0) {
         warning("This high dimensional concept contains no data.")
         return(NULL)
@@ -82,17 +79,17 @@ getHighdimData <- function(study.name, concept.match = NULL, concept.link = NULL
     }
     message("Retrieving data from server. This can take some time, depending on your network connection speed. ",
             as.character(Sys.time()))
-    serverResult <- .transmartServerGetRequest(projectionLink, accept.type = "binary", progress = progress.download)
+    serverResult <- .transmartServerGetRequest(projectionLink, accept.type = "binary")
     if (length(serverResult$content) == 0) {
         warning("No data could be found. The server yielded an empty dataset. Returning NULL.")
         return(NULL)
     }
 
-    return(.parseHighdimData(serverResult$content, progress = progress.parse))
+    return(.parseHighdimData(serverResult$content))
 }
 
-.parseHighdimData <- 
-function(rawVector, .to.data.frame.converter=.as.data.frame.fast, progress=.make.progresscallback.parse()) {
+.parseHighdimData <-
+function(rawVector, .to.data.frame.converter=.as.data.frame.fast) {
     dataChopper <- .messageChopper(rawVector)
 
     message <- dataChopper$getNextMessage()
@@ -109,24 +106,24 @@ function(rawVector, .to.data.frame.converter=.as.data.frame.fast, progress=.make
     assayLabels <- .DollarNames(assays[[1]])[1:length(assays[[1]])]
 
     for (label in assayLabels) {
-        
-        # RProtoBuf does not support int64 on all platforms that we need to 
-        # support. Specifically, binaries from CRAN don't support it, which 
-        # means Windows platforms and the default OSX R distribution. Linux and 
-        # OSX with Homebrew download source packages from CRAN and compile 
+
+        # RProtoBuf does not support int64 on all platforms that we need to
+        # support. Specifically, binaries from CRAN don't support it, which
+        # means Windows platforms and the default OSX R distribution. Linux and
+        # OSX with Homebrew download source packages from CRAN and compile
         # locally, so they don't have problems with int64.
         #
-        # The problem actually is in Rcpp. CRAN does not allow use of 'long 
-        # long' types as it is considered non portable. Rcpp works around this 
-        # by conditionally including 64 bit int support if it is compiled 
+        # The problem actually is in Rcpp. CRAN does not allow use of 'long
+        # long' types as it is considered non portable. Rcpp works around this
+        # by conditionally including 64 bit int support if it is compiled
         # somewhere other than CRAN.
         #
-        # The serialization format uses an int64 field for 
-        # highdim.Assay.assayId. Reading that field on platforms that do not 
-        # have int64 support results in an error. As a workaround we parse the 
+        # The serialization format uses an int64 field for
+        # highdim.Assay.assayId. Reading that field on platforms that do not
+        # have int64 support results in an error. As a workaround we parse the
         # assayId field from the string representation of the assay. (This works
-        # because the as.character() conversion calls a DebugString method in 
-        # the C++ protobuf library, so the RProtoBuf C++ code that CRAN sees 
+        # because the as.character() conversion calls a DebugString method in
+        # the C++ protobuf library, so the RProtoBuf C++ code that CRAN sees
         # never touches the 64 bit integers directly.)
 
         if (label == "assayId") {
@@ -140,8 +137,6 @@ function(rawVector, .to.data.frame.converter=.as.data.frame.fast, progress=.make
     message("Received data for ", noAssays, " assays. Unpacking data. ", as.character(Sys.time()))
 
     totalsize <- length(rawVector)
-    progress$start(totalsize)
-    callback <- progress$update
 
     labelToBioMarker <- hash() #biomarker info is optional, but should not be omitted, as it is also part of the data
 
@@ -151,8 +146,6 @@ function(rawVector, .to.data.frame.converter=.as.data.frame.fast, progress=.make
 
         labelToBioMarker[[rowlabel]] <- (if(is.null(row$bioMarker)) NA_character_ else row$bioMarker)
         rowValues <- row$value
-
-        callback(dataChopper$getRawVectorIndex(), totalsize)
 
         if(length(rowValues) == 1) {
             # if only one value, don't add the columnSpec name to the rowlabel.
@@ -174,7 +167,6 @@ function(rawVector, .to.data.frame.converter=.as.data.frame.fast, progress=.make
         }
 
     }
-    progress$end()
 
     message("Data unpacked. Converting to data.frame. ", as.character(Sys.time()))
 
@@ -189,23 +181,6 @@ function(rawVector, .to.data.frame.converter=.as.data.frame.fast, progress=.make
                 "containing the high dimensional data and a hash describing which (column) labels refer to which bioMarker")
         return(list(data = data, labelToBioMarkerMap = labelToBioMarker))
     }
-}
-
-
-.make.progresscallback.parse <- function() {
-    pb <- NULL
-    lst <- list()
-    lst$start <- function(total) {
-        pb <<- txtProgressBar(min = 0, max = total, style = 3)
-    }
-    lst$update <- function(current, .total) {
-        setTxtProgressBar(pb, current)
-    }
-    lst$end <- function() {
-        close(pb)
-    }
-
-    lst
 }
 
 .messageChopper <- function(rawVector, endOfLastMessage = 0) {

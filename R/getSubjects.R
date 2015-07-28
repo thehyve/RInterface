@@ -21,10 +21,10 @@
 # You should have received a copy of the GNU General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-getSubjects <- function(study.name, as.data.frame = TRUE) {
+getSubjects <- function(apiUrl, auth.token, study.name, as.data.frame = TRUE) {
     .checkTransmartConnection()
 
-    serverResult <- .transmartServerGetRequest( paste("/studies/", study.name,"/subjects", sep=""), accept.type = "hal")
+    serverResult <- .transmartServerGetRequest(apiUrl, paste("/studies/", study.name,"/subjects", sep=""), auth.token, accept.type = "hal")
     listOfSubjects <- serverResult$subjects
 
     subjectIDs <- sapply(listOfSubjects, FUN = function(x) { x[["id"]] })

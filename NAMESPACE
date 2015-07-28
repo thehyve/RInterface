@@ -1,1 +1,8 @@
+import(RCurl)
+import(httr)
+import(hash)
+import(RProtoBuf)
+import(RJSONIO)
+import(plyr)
+import(reshape)
 exportPattern("^[[:alpha:]]+")

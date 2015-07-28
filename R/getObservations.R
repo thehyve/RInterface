@@ -21,7 +21,7 @@
 # You should have received a copy of the GNU General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-getObservations <- function(study.name, concept.match = NULL, concept.links = NULL, as.data.frame = TRUE) {
+getObservations <- function(apiUrl, auth.token, study.name, concept.match = NULL, concept.links = NULL, as.data.frame = TRUE) {
     .checkTransmartConnection()
 
     if (is.null(concept.links)) {
@@ -50,9 +50,9 @@ getObservations <- function(study.name, concept.match = NULL, concept.links = NU
     listOfObservations <- list()
 
     for (oneLink in concept.links) {
-        serverResult <- .transmartServerGetRequest(
-                paste(oneLink, "/observations", sep = ""),
-                accept.type = "hal") 
+        serverResult <- .transmartServerGetRequest(apiUrl,
+                paste(oneLink, "/observations", sep = ""), auth.token,
+                accept.type = "hal")
         listOfObservations <- c(listOfObservations, serverResult$observations)
     }
 
