@@ -22,6 +22,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>..
 
 getStudies <- function(apiUrl, auth.token, name.match = "", as.data.frame = TRUE, cull.columns = TRUE) {
+    if(!.checkTransmartConnection()) return(NULL)
 
     serverResult <- .transmartServerGetRequest(apiUrl, "/studies", auth.token, accept.type = "hal")
     listOfStudies <- serverResult$studies
