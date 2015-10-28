@@ -33,6 +33,8 @@ require("transmartRClient")
 #   In that case: try again later. 
 #   If you are not able to login for a persistent time, you can email us for help at: <<SOME_ADRESS>
 connectToTransmart("http://transmart-demo.thehyve.net/transmart")
+connectToTransmart("http://localhost:8080/transmart")
+connectToTransmart("http://test-1dot2.thehyve.net/transmart")
 
 #Alternatively, you can try to log in to the demo server of the transmart foundation.
 #   We cannot, however, guarantee that this server will be running, that it has the right tranSMART version and which data will be present there
@@ -49,6 +51,7 @@ print(studies)
 # study<-studies$id[1]
 # for the examples below we will use GSE8581, a study that aimed to identify biomarkers for COPD
 study <- "GSE8581"  
+study <- "DECODE_WP6"
 
 # Retrieve Clinical Data
 allObservations <- getObservations(study, as.data.frame = T)
@@ -139,8 +142,8 @@ patientSet<-patientSet[which(patientSet %in% rownames(expression_data))]
 subset<-t(expression_data[patientSet,probeNames]) 
 
 #for ease of recognition: append "Case" and "Control" to the patient names
-colnames(subset)[colnames(subset)%in% patientIDsCase] <- paste(colnames(subset)[colnames(subset)%in% patientIDsCase],"Case", sep="_" )
 colnames(subset)[colnames(subset)%in% patientIDsControl] <- paste( colnames(subset)[colnames(subset)%in% patientIDsControl] , "Control",sep= "_")
+colnames(subset)[colnames(subset)%in% patientIDsCase] <- paste(colnames(subset)[colnames(subset)%in% patientIDsCase],"Case", sep="_" )
 
 dim(subset)
 heatmap(as.matrix(subset), scale = "row")
