@@ -119,6 +119,17 @@ getHighdimData <- function(study.name, concept.match = NULL, concept.link = NULL
     constraints
 }
 
+# If there are multiple constraints of the same name, combine them the way the server expects
+.combineConstraints <- function(constraints) {
+    uniqueNames <- unique(names(constraints))
+    names(uniqueNames) <- uniqueNames
+    lapply(uniqueNames, function(name) {
+        con <- constraints[names(constraints) == name]
+        names(con) <- NULL
+        con
+    })
+}
+
 # The argument is a single named list
 .expandConstraints <- function(constraints) {
     # The JSON encoder encodes single item vectors as scalars. We need those to be lists as well sometimes.
@@ -225,8 +236,8 @@ getHighdimData <- function(study.name, concept.match = NULL, concept.link = NULL
 
     rest <- .expandConstraints(constraints)
     
-    assay.constraints <- c(.translateConstraintNames(rest[names(rest) %in% valid.assay.constraints]), assay.constraints)
-    data.constraints <- c(.translateConstraintNames(rest[names(rest) %in% valid.data.constraints]), data.constraints)
+    assay.constraints <- c(.combineConstraints(.translateConstraintNames(rest[names(rest) %in% valid.assay.constraints])), assay.constraints)
+    data.constraints <- c(.combineConstraints(.translateConstraintNames(rest[names(rest) %in% valid.data.constraints])), data.constraints)
     
     list(assay=assay.constraints, data=data.constraints)
 }
