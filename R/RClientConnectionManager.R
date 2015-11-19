@@ -22,33 +22,34 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 connectToTransmart <- 
-function (transmartDomain, use.authentication = TRUE, token = NULL, .access.token = NULL, ...) {
+function (transmartDomain, use.authentication = TRUE, token = NULL, request.token = NULL, .access.token = NULL, ...) {
     if (!exists("transmartClientEnv") || transmartClientEnv$transmartDomain != transmartDomain) { 
-        assign("transmartClientEnv", new.env(parent = .GlobalEnv), envir = .GlobalEnv)
+        conn <- TransmartConnection(transmartDomain, token=token, .access.token=.access.token, ...)
+        assign("transmartClientEnv", conn, envir = .GlobalEnv)
     }
 
-    transmartClientEnv$transmartDomain <- transmartDomain
-    transmartClientEnv$db_access_url <- transmartClientEnv$transmartDomain
-    if (!is.null(token)) {
-        transmartClientEnv$refresh_token <- token
+    if(conn$connect(use.authentication, request.token)) {
+        conn
+    } else {
+        NULL
     }
-    if (!is.null(.access.token)) {
-        transmartClientEnv$access_token <- .access.token
-    }
+}
 
-    if(.checkTransmartConnection()) {
+connect <- 
+function (use.authentication = TRUE, request.token=NULL) {
+    if(checkTransmartConnection()) {
         message("Connection active")
         return(invisible(TRUE))
     }
 
-    if (use.authentication && !exists("access_token", envir = transmartClientEnv)) {
-        authenticated <- authenticateWithTransmart(...)
+    if (use.authentication && is.null(accessToken)) {
+        authenticated <- authenticateWithTransmart(request.token)
         if(is.null(authenticated)) return()
-    } else if (!use.authentication && exists("access_token", envir = transmartClientEnv)) {
-        remove("access_token", envir = transmartClientEnv)
+    } else if (!use.authentication && !is.null(accessToken)) {
+        accessToken <<- NULL
     }
 
-    if(!.checkTransmartConnection()) {
+    if(!checkTransmartConnection()) {
         stop("Connection unsuccessful. Type: ?connectToTransmart for help.")
     } else {
         message("Connection successful.")
@@ -57,30 +58,36 @@ function (transmartDomain, use.authentication = TRUE, token = NULL, .access.toke
 }
 
 getTransmartToken <- function() {
-    if(exists("transmartClientEnv")) return(transmartClientEnv$refresh_token)
+    refreshToken
+}
+
+.updateFromResponse <-
+function(response) {
+    oauthInfo <<- response
+
+    map <- c(accessToken='access_token', tokenExpiresIn='expires_in', refreshToken='refresh_token')
+    for(field in names(map)) {
+        if(field %in% names(response)) {
+            .self$field(field) <- response[[map[field]]]
+        }
+    }
+    if('access_token' %in% names(response)) {
+        accessTokenTimestamp <<- Sys.time()        
+    }
 }
 
 authenticateWithTransmart <- 
-function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.token = NULL,
-          client.id = "api-client", client.secret = "api-client") {
-    if (!exists("transmartClientEnv")) assign("transmartClientEnv", new.env(parent = .GlobalEnv), envir = .GlobalEnv)
-
-    transmartClientEnv$oauthDomain <- oauthDomain
-    transmartClientEnv$client_id <- client.id
-    transmartClientEnv$client_secret <- client.secret
-
+function(request.token=NULL) {
     oauth.request.token.url <- paste(sep = "",
-            transmartClientEnv$oauthDomain,
-            "/oauth/authorize?response_type=code&client_id=", 
-            transmartClientEnv$client_id,
-            "&client_secret=", transmartClientEnv$client_secret,
-            "&redirect_uri=", URLencode(transmartClientEnv$oauthDomain, TRUE),
-            URLencode("/oauth/verify", TRUE))
+            oauthDomain,
+            "/oauth/authorize?response_type=code",
+            "&client_id=", URLencode(clientId, TRUE),
+            "&client_secret=", URLencode(clientSecret, TRUE),
+            "&redirect_uri=", URLencode(oauthDomain, TRUE), URLencode("/oauth/verify", TRUE)
+            )
 
-    if (!is.null(prefetched.request.token)) {
-        request.token <- prefetched.request.token
-    } else {
-        cat("No access token specified. Please visit the following url to authenticate this RClient ",
+    if (is.null(request.token)) {
+        cat("Please visit the following url to authenticate this RClient ",
             "(enter nothing to cancel):\n\n",
             oauth.request.token.url, "\n\n",
             "And paste the verifier token here:\n")
@@ -93,37 +100,33 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
     }
 
     oauth.exchange.token.path <- paste(sep = "",
-            "/oauth/token?grant_type=authorization_code&client_id=",
-            transmartClientEnv$client_id,
-            "&client_secret=", transmartClientEnv$client_secret,
+            "/oauth/token?grant_type=authorization_code",
+            "&client_id=", URLencode(clientId, TRUE),
+            "&client_secret=", URLencode(clientSecret, TRUE),
             "&code=", URLencode(request.token, TRUE),
-            "&redirect_uri=", URLencode(transmartClientEnv$oauthDomain, TRUE),
-            URLencode("/oauth/verify", TRUE))
+            "&redirect_uri=", URLencode(oauthDomain, TRUE), URLencode("/oauth/verify", TRUE)
+            )
 
     oauthResponse <- .transmartServerGetOauthRequest(oauth.exchange.token.path, "Authentication")
     if (is.null(oauthResponse)) return(FALSE)
 
-    list2env(oauthResponse$content, envir = transmartClientEnv)
-    transmartClientEnv$access_token.timestamp <- Sys.time()
+    .updateFromResponse(oauthResponse$content)
     cat("Authentication completed\n")
     return(TRUE)
 }
 
-.refreshToken <- function(oauthDomain = transmartClientEnv$transmartDomain) {
-    if (!exists("refresh_token", envir=transmartClientEnv)) {
+.refreshToken <- function() {
+    if (!is.null(refreshToken)) {
         message("Unable to refresh the connection, no refresh token found")
         return(FALSE)
     }
-    transmartClientEnv$oauthDomain <- oauthDomain
-    transmartClientEnv$client_id <- "api-client"
-    transmartClientEnv$client_secret <- "api-client"
     message("Trying to reauthenticate using the refresh token...")
     refreshPath <- paste(sep = "",
                         "/oauth/token?grant_type=refresh_token",
-                        "&client_id=", transmartClientEnv$client_id,
-                        "&client_secret=", transmartClientEnv$client_secret,
-                        "&refresh_token=", URLencode(transmartClientEnv$refresh_token, TRUE),
-                        "&redirect_uri=", URLencode(transmartClientEnv$oauthDomain, TRUE),
+                        "&client_id=", URLencode(clientId, TRUE),
+                        "&client_secret=", URLencode(client_secret, TRUE),
+                        "&refresh_token=", URLencode(refreshToken, TRUE),
+                        "&redirect_uri=", URLencode(oauthDomain, TRUE),
                         URLencode("/oauth/verify", TRUE),
                         "")
     
@@ -133,8 +136,7 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
         message("Refreshing access failed, server response did not contain access_token. HTTP", statusString)
         return(FALSE)
     }
-    list2env(oauthResponse$content, envir = transmartClientEnv)
-    transmartClientEnv$access_token.timestamp <- Sys.time()
+    .updateFromResponse(oauthResponse$content)
     return(TRUE)
 }
 
@@ -146,8 +148,7 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
         return(NULL)
     }
     if ('error' %in% names(oauthResponse$content)) {
-        cat(action, " failed, removing refresh_token:", oauthResponse$content[['error_description']], "\n", sep='')
-        rm(refresh_token, envir=transmartClientEnv)
+        cat(action, " failed:", oauthResponse$content[['error_description']], "\n", sep='')
         return(NULL)
     }
     if (!oauthResponse$status == 200) {
@@ -157,20 +158,22 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
     return(oauthResponse)
 }
 
-.ensureTransmartConnection <- function() {return(.checkTransmartConnection(stop.on.error = TRUE))}
+.ensureAlive <- function() {return(isAlive(stop.on.error = TRUE))}
 
-.checkTransmartConnection <- function(stop.on.error = FALSE) {
+isAlive <- function(retry = FALSE, stop.on.error = FALSE) {
     if(stop.on.error) {
         stopfn <- stop
     } else {
         stopfn <- function(e) {message(e); return(FALSE)}
     }
 
-    if (!exists("transmartClientEnv", envir = .GlobalEnv)) {
-        return(stopfn("No connection to tranSMART has been set up. For details, type: ?connectToTransmart"))
+    if(failed && !retry) {
+        return(stopfn("Connection is dead. Call TransmartConnection$isAlive(retry=TRUE) to try again."))
     }
+    
+    failed <<- TRUE
 
-    if (exists("access_token", envir = transmartClientEnv)) {
+    if (!is.null(accessToken)) {
         ping <- .transmartServerGetRequest("/oauth/inspectToken", accept.type = "default", onlyContent = F)
         if(ping$status == 404) {
             # Maybe we're talking to an older version of Transmart that uses the version 1 oauth plugin
@@ -178,7 +181,10 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
         }
         if (getOption("verbose")) { message(paste(ping$content, collapse = ": ")) }
 
-        if(ping$status == 200) { return(TRUE) }
+        if(ping$status == 200) {
+            failed <<- FALSE
+            return(TRUE)
+        }
 
         if(!'error' %in% names(ping$content)) {
             return(stopfn("HTTP ", ping$status, ": ", ping$statusMessage))
@@ -216,8 +222,8 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
 # onlyContent = NULL, this will return a list with data, headers and status code.
 .transmartServerGetRequest <- function(apiCall, errorHandler = .requestErrorHandler, onlyContent = c(200),
         ensureJSON = FALSE, ...)  {
-    if (exists("access_token", envir = transmartClientEnv)) {
-        httpHeaderFields <- c(Authorization = paste("Bearer ", transmartClientEnv$access_token, sep=""))
+    if (!is.null(accessToken)) {
+        httpHeaderFields <- c(Authorization = paste("Bearer", accessToken))
     } else { httpHeaderFields <- character(0) }
 
     tryCatch(result <- .serverMessageExchange(apiCall, httpHeaderFields, ...), error = errorHandler)
@@ -248,6 +254,7 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
     result
 }
 
+# plain function
 .contentType <- function(header) {
     if(grepl("^application/json(;|\\W|$)", header)) {
         return('json')
@@ -261,6 +268,7 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
     return('unknown')
 }
 
+# plain function
 .serverMessageExchange <- 
 function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.progresscallback.download()) {
     if (any(accept.type == c("default", "hal"))) {
@@ -308,6 +316,7 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
     return(NULL)
 }
 
+# plain function
 .make.progresscallback.download <- function() {
     start <- function(.total) cat("Retrieving data: \n")
     update <- function(current, .total) {
@@ -319,6 +328,7 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
 }
 
 
+# plain function
 .listToDataFrame <- function(l) {
     # TODO: (timdo) dependency on 'plyr' package removed; figure out whether dependency is present elsewhere, or remove dependency
     # add each list-element as a new row to a matrix, in two passes
