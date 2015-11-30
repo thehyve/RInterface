@@ -24,9 +24,11 @@
 
 connectToTransmart <- 
 function (transmartDomain, use.authentication = TRUE, token = NULL, request.token = NULL, .access.token = NULL, ...) {
-    if (!exists("transmartClientEnv") || transmartClientEnv$transmartDomain != transmartDomain) { 
+    if (!exists("defaultGlobalTransmartConnection") || defaultGlobalTransmartConnection$transmartDomain != transmartDomain) { 
         conn <- TransmartConnection(transmartDomain, token=token, .access.token=.access.token, ...)
-        assign("transmartClientEnv", conn, envir = .GlobalEnv)
+        assign("defaultGlobalTransmartConnection", conn, envir = .GlobalEnv)
+    } else {
+        conn <- defaultGlobalTransmartConnection
     }
 
     if(conn$connect(use.authentication, request.token)) {
@@ -45,7 +47,7 @@ function (use.authentication = TRUE, request.token=NULL) {
 
     if (use.authentication && is.null(accessToken)) {
         authenticated <- authenticateWithTransmart(request.token)
-        if(is.null(authenticated)) return()
+        if(!authenticated) return(invisible(FALSE))
     } else if (!use.authentication && !is.null(accessToken)) {
         accessToken <<- NULL
     }

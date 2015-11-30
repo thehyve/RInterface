@@ -27,9 +27,9 @@ TransmartConnection <- setRefClass('TransmartConnection', fields=c(
     'oauthInfo', 'failed'
     ),
     methods=list(
-        initialize=function(transmartDomain, oauthDomain = transmartDomain, databaseUrl = transmartDomain,
-                            clientId = 'api-client', clientSecret = 'api-client',
-                            token = NULL, .access.token = NULL) {
+        initialize = function(transmartDomain, oauthDomain = transmartDomain, databaseUrl = transmartDomain,
+                              clientId = 'api-client', clientSecret = 'api-client',
+                              token = NULL, .access.token = NULL) {
             transmartDomain <<- transmartDomain
             oauthDomain <<- oauthDomain
             databaseUrl <<- databaseUrl
@@ -43,16 +43,25 @@ TransmartConnection <- setRefClass('TransmartConnection', fields=c(
             failed <<- FALSE
         },
         
+        .objectId = function() {
+            "R doesn't really have an easy way to detect reference object identity. This method is a hack
+            that returns the id of the objects internal environment."
+            # alternative: data.table::address(.self@.xData), but I don't want to depend on
+            # data.table just for this
+            sub('<environment: (.*)>', '\\1', capture.output(.self@.xData))
+        },
+        
         connect = connect,
         authenticateWithTransmart = authenticateWithTransmart,
         getToken = getTransmartToken,
+        getStudies = getStudies,
         ensureAlive = ensureAlive,
-        isAlive = isAlive
+        isAlive = isAlive,
         .refreshToken = .refreshToken,
         .transmartServerGetOauthRequest = .transmartServerGetOauthRequest,
         .updateFromResponse = .updateFromResponse,
         .transmartGetJSON = .transmartGetJSON,
         .transmartServerGetRequest = .transmartServerGetRequest,
-        .serverMessageExchange = .serverMessageExchange,
+        .serverMessageExchange = .serverMessageExchange
     )
 )

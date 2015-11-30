@@ -23,7 +23,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>..
 
 getStudies <- function(name.match = "", as.data.frame = TRUE, cull.columns = TRUE) {
-    .ensureTransmartConnection()
+    ensureAlive()
 
     serverResult <- .transmartGetJSON("/studies")
     listOfStudies <- serverResult$studies
