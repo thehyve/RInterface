@@ -37,7 +37,7 @@ function (transmartDomain, use.authentication = TRUE, token = NULL, request.toke
 
 connect <- 
 function (use.authentication = TRUE, request.token=NULL) {
-    if(checkTransmartConnection()) {
+    if(isAlive(quiet=TRUE)) {
         message("Connection active")
         return(invisible(TRUE))
     }
@@ -49,7 +49,7 @@ function (use.authentication = TRUE, request.token=NULL) {
         accessToken <<- NULL
     }
 
-    if(!checkTransmartConnection()) {
+    if(!isAlive(retry=TRUE)) {
         stop("Connection unsuccessful. Type: ?connectToTransmart for help.")
     } else {
         message("Connection successful.")
@@ -67,7 +67,7 @@ function(response) {
 
     map <- c(accessToken='access_token', tokenExpiresIn='expires_in', refreshToken='refresh_token')
     for(field in names(map)) {
-        if(field %in% names(response)) {
+        if(map[[field]] %in% names(response)) {
             .self$field(field, response[[map[field]]])
         }
     }
@@ -116,7 +116,7 @@ function(request.token=NULL) {
 }
 
 .refreshToken <- function() {
-    if (!is.null(refreshToken)) {
+    if (is.null(refreshToken)) {
         message("Unable to refresh the connection, no refresh token found")
         return(FALSE)
     }
@@ -124,7 +124,7 @@ function(request.token=NULL) {
     refreshPath <- paste(sep = "",
                         "/oauth/token?grant_type=refresh_token",
                         "&client_id=", URLencode(clientId, TRUE),
-                        "&client_secret=", URLencode(client_secret, TRUE),
+                        "&client_secret=", URLencode(clientSecret, TRUE),
                         "&refresh_token=", URLencode(refreshToken, TRUE),
                         "&redirect_uri=", URLencode(oauthDomain, TRUE),
                         URLencode("/oauth/verify", TRUE),
@@ -148,7 +148,7 @@ function(request.token=NULL) {
         return(NULL)
     }
     if ('error' %in% names(oauthResponse$content)) {
-        cat(action, " failed:", oauthResponse$content[['error_description']], "\n", sep='')
+        cat(action, " failed: ", oauthResponse$content[['error_description']], "\n", sep='')
         return(NULL)
     }
     if (!oauthResponse$status == 200) {
@@ -160,11 +160,13 @@ function(request.token=NULL) {
 
 ensureAlive <- function() {return(isAlive(stop.on.error = TRUE))}
 
-isAlive <- function(retry = FALSE, stop.on.error = FALSE) {
+isAlive <- function(retry = FALSE, stop.on.error = FALSE, quiet = FALSE) {
     if(stop.on.error) {
         stopfn <- stop
-    } else {
+    } else if(!quiet) {
         stopfn <- function(e) {message(e); return(FALSE)}
+    } else {
+        stopfn <- function(e) {return(FALSE)}
     }
 
     if(failed && !retry) {
@@ -192,18 +194,19 @@ isAlive <- function(retry = FALSE, stop.on.error = FALSE) {
         if(ping$status != 401 || ping$content[['error']] != "invalid_token") {
             return(stopfn("HTTP ", ping$status, ": ", ping$statusMessage, "\n", ping$content[['error']],  ": ", ping$content[['error_description']]))
         }
-    } else if (!exists("refresh_token", envir = transmartClientEnv)) {
+    } else if (is.null(refreshToken)) {
         return(stopfn("Unable to refresh authentication: no refresh token"))
     }
 
     # try to refresh authentication
     if (.refreshToken()) {
+        failed <<- FALSE
         message("Access token refreshed.")
         return(TRUE)
     } else {
-        message("Removing access token from the environment.")
-        remove("access_token", envir = transmartClientEnv)
-        return(stopfn("Refreshing access failed"))
+        # failed <<- TRUE already set
+        return(stopfn("Refreshing access failed. "))
+        stopfn("Refreshing access failed, connection is dead. Call TransmartConnection$connect() to re-establish the connection.")
     }
 }
 
@@ -275,7 +278,7 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
         if (accept.type == "hal") { httpHeaderFields <- c(httpHeaderFields, Accept = "application/hal+json;charset=UTF-8") }
         headers <- basicHeaderGatherer()
         result <- list(JSON = FALSE)
-        result$content <- getURL(paste(sep="", transmartClientEnv$db_access_url, apiCall),
+        result$content <- getURL(paste(sep="", databaseUrl, apiCall),
                 verbose = getOption("verbose"),
                 httpheader = httpHeaderFields,
                 headerfunction = headers$update)
@@ -298,7 +301,7 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
         progress$start(NA_integer_)
         result <- list(JSON = FALSE)
         headers <- basicHeaderGatherer()
-        result$content <- getBinaryURL(paste(sep="", transmartClientEnv$db_access_url, apiCall),
+        result$content <- getBinaryURL(paste(sep="", databaseUrl, apiCall),
                 verbose = getOption("verbose"),
                 headerfunction = headers$update,
                 noprogress = FALSE,
