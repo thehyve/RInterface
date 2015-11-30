@@ -68,7 +68,7 @@ function(response) {
     map <- c(accessToken='access_token', tokenExpiresIn='expires_in', refreshToken='refresh_token')
     for(field in names(map)) {
         if(field %in% names(response)) {
-            .self$field(field) <- response[[map[field]]]
+            .self$field(field, response[[map[field]]])
         }
     }
     if('access_token' %in% names(response)) {
@@ -158,7 +158,7 @@ function(request.token=NULL) {
     return(oauthResponse)
 }
 
-.ensureAlive <- function() {return(isAlive(stop.on.error = TRUE))}
+ensureAlive <- function() {return(isAlive(stop.on.error = TRUE))}
 
 isAlive <- function(retry = FALSE, stop.on.error = FALSE) {
     if(stop.on.error) {
@@ -372,6 +372,7 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
     list
 }
 
+# plain function
 .simplifyHalList <- function(halList) {
     # rename _links element to api.link
     names(halList)[which(names(halList) == "_links")] <- "api.link"
