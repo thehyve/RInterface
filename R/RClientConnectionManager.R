@@ -1,3 +1,4 @@
+# Copyright 2014, 2015 The Hyve B.V.
 # Copyright 2014 Janssen Research & Development, LLC.
 #
 # This file is part of tranSMART R Client: R package allowing access to
@@ -211,9 +212,9 @@ isAlive <- function(retry = FALSE, stop.on.error = FALSE, quiet = FALSE) {
 }
 
 .requestErrorHandler <- function(e, result=NULL) {
-    message("Sorry, the R client was unable to carry out your request. ",
-            "Please make sure that the transmart server is still running. \n\n",
-            "If the server is not down, you've encountered a bug.\n",
+    message("Sorry, the R client encountered the following error: ", e,
+            "\n\nPlease make sure that the transmart server is still running. ",
+            "If the server is not down, you may have encountered a bug.\n",
             "You can help fix it by contacting us. Type ?transmartRClient for contact details.\n", 
             "Optional: type options(verbose = TRUE) and replicate the bug to find out more details.")
     stop(e, call.=FALSE)
