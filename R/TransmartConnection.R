@@ -46,14 +46,13 @@ TransmartConnection <- setRefClass('TransmartConnection', fields=c(
         connect = connect,
         authenticateWithTransmart = authenticateWithTransmart,
         getToken = getTransmartToken,
-        .updateFromResponse = .updateFromResponse,
+        ensureAlive = ensureAlive,
+        isAlive = isAlive
         .refreshToken = .refreshToken,
         .transmartServerGetOauthRequest = .transmartServerGetOauthRequest,
+        .updateFromResponse = .updateFromResponse,
         .transmartGetJSON = .transmartGetJSON,
         .transmartServerGetRequest = .transmartServerGetRequest,
         .serverMessageExchange = .serverMessageExchange,
-         ensureAlive = ensureAlive,
-         isAlive = isAlive
-        
     )
 )
