@@ -102,15 +102,13 @@ function(request.token=NULL) {
         return(FALSE)
     }
 
-    oauth.exchange.token.path <- paste(sep = "",
-            "/oauth/token?grant_type=authorization_code",
-            "&client_id=", URLencode(clientId, TRUE),
-            "&client_secret=", URLencode(clientSecret, TRUE),
-            "&code=", URLencode(request.token, TRUE),
-            "&redirect_uri=", URLencode(oauthDomain, TRUE), URLencode("/oauth/verify", TRUE)
-            )
+    oauth.exchange.token.path <- "/oauth/token"
+    post.body <- list(
+        grant_type="authorization_code",
+        code=request.token,
+        redirect_uri=paste0(oauthDomain, "/oauth/verify"))
 
-    oauthResponse <- .transmartServerGetOauthRequest(oauth.exchange.token.path, "Authentication")
+    oauthResponse <- .transmartServerPostOauthRequest(oauth.exchange.token.path, "Authentication", post.body)
     if (is.null(oauthResponse)) return(FALSE)
 
     .updateFromResponse(oauthResponse$content)
@@ -124,16 +122,12 @@ function(request.token=NULL) {
         return(FALSE)
     }
     message("Trying to reauthenticate using the refresh token...")
-    refreshPath <- paste(sep = "",
-                        "/oauth/token?grant_type=refresh_token",
-                        "&client_id=", URLencode(clientId, TRUE),
-                        "&client_secret=", URLencode(clientSecret, TRUE),
-                        "&refresh_token=", URLencode(refreshToken, TRUE),
-                        "&redirect_uri=", URLencode(oauthDomain, TRUE),
-                        URLencode("/oauth/verify", TRUE),
-                        "")
-    
-    oauthResponse <- .transmartServerGetOauthRequest(refreshPath, "Refreshing access")
+    refreshPath <- "/oauth/token"
+    post.body <- list(grant_type="refresh_token",
+        refresh_token=refresh_token,
+        redirect_uri=paste0(oauthDomain, "/oauth/verify"))
+
+    oauthResponse <- .transmartServerPostOauthRequest(refreshPath, "Refreshing access", post.body)
     if (is.null(oauthResponse)) return(FALSE)
     if (!'access_token' %in% names(oauthResponse$content)) {
         message("Refreshing access failed, server response did not contain access_token. HTTP", statusString)
@@ -143,8 +137,8 @@ function(request.token=NULL) {
     return(TRUE)
 }
 
-.transmartServerGetOauthRequest <- function(path, action) {
-    oauthResponse <- .transmartServerGetRequest(path, onlyContent=F)
+.transmartServerPostOauthRequest <- function(path, action, post.body) {
+    oauthResponse <- .transmartServerGetRequest(path, onlyContent=F, post.body=post.body)
     statusString <- paste("status code ", oauthResponse$status, ": ", oauthResponse$headers[['statusMessage']], sep='')
     if (!oauthResponse$JSON) {
         cat(action, " failed, could not parse server response of type ", oauthResponse$headers[['Content-Type']], ". ", statusString, "\n", sep='')
@@ -192,10 +186,10 @@ isAlive <- function(retry = FALSE, stop.on.error = FALSE, quiet = FALSE) {
         }
 
         if(!'error' %in% names(ping$content)) {
-            return(stopfn("HTTP ", ping$status, ": ", ping$statusMessage))
+            return(stopfn(paste("HTTP ", ping$status, ": ", ping$statusMessage, sep='')))
         }
         if(ping$status != 401 || ping$content[['error']] != "invalid_token") {
-            return(stopfn("HTTP ", ping$status, ": ", ping$statusMessage, "\n", ping$content[['error']],  ": ", ping$content[['error_description']]))
+            return(stopfn(paste("HTTP ", ping$status, ": ", ping$statusMessage, "\n", ping$content[['error']],  ": ", ping$content[['error_description']], sep='')))
         }
     } else if (is.null(refreshToken)) {
         return(stopfn("Unable to refresh authentication: no refresh token"))
@@ -219,7 +213,12 @@ isAlive <- function(retry = FALSE, stop.on.error = FALSE, quiet = FALSE) {
             "If the server is not down, you may have encountered a bug.\n",
             "You can help fix it by contacting us. Type ?transmartRClient for contact details.\n", 
             "Optional: type options(verbose = TRUE) and replicate the bug to find out more details.")
-    stop(e, call.=FALSE)
+    # If e is a condition adding the call. parameter triggers another warning
+    if(inherits(e, "condition")) {
+        stop(e)
+    } else {
+        stop(e, call.=FALSE)
+    }
 }
 
 .transmartGetJSON <- function(apiCall, ...) { .transmartServerGetRequest(apiCall, ensureJSON = TRUE, accept.type = "hal", ...) }
@@ -261,14 +260,18 @@ isAlive <- function(retry = FALSE, stop.on.error = FALSE, quiet = FALSE) {
 }
 
 # plain function
-.contentType <- function(header) {
-    if(grepl("^application/json(;|\\W|$)", header)) {
+.contentType <- function(headers) {
+    if(! 'content-type' %in% names(headers)) {
+        return('content-type header not found')
+    }
+    h <- headers[['content-type']]
+    if(grepl("^application/json(;|\\W|$)", h)) {
         return('json')
     }
-    if(grepl("^application/hal\\+json(;|\\W|$)", header)) {
+    if(grepl("^application/hal\\+json(;|\\W|$)", h)) {
         return('hal')
     }
-    if(grepl("^text/html(;|\\W|$)", header)) {
+    if(grepl("^text/html(;|\\W|$)", h)) {
         return('html')
     }
     return('unknown')
@@ -276,21 +279,33 @@ isAlive <- function(retry = FALSE, stop.on.error = FALSE, quiet = FALSE) {
 
 # plain function
 .serverMessageExchange <- 
-function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.progresscallback.download()) {
+function(apiCall, httpHeaderFields, accept.type = "default", post.body = NULL, show.progress = (accept.type == 'binary') ) {
     if (any(accept.type == c("default", "hal"))) {
-        if (accept.type == "hal") { httpHeaderFields <- c(httpHeaderFields, Accept = "application/hal+json;charset=UTF-8") }
-        headers <- basicHeaderGatherer()
+        if (accept.type == "hal") {
+            httpHeaderFields <- c(httpHeaderFields, Accept = "application/hal+json;charset=UTF-8")
+        }
         result <- list(JSON = FALSE)
-        result$content <- getURL(paste(sep="", databaseUrl, apiCall),
-                verbose = getOption("verbose"),
-                httpheader = httpHeaderFields,
-                headerfunction = headers$update)
+        api.url <- paste0(databaseUrl, apiCall)
+        if (is.null(post.body)) {
+            req <- GET(api.url,
+                       add_headers(httpHeaderFields),
+                       authenticate(clientId, clientSecret),
+                       config(verbose = getOption("verbose")))
+        } else {
+            req <- POST(api.url,
+                        body = post.body,
+                        add_headers(httpHeaderFields),
+                        authenticate(clientId, clientSecret),
+                        encode='form',
+                        config(verbose = getOption("verbose")))
+            if (getOption("verbose")) { message("POST body:\n", .list2string(post.body), "\n") }
+        }
+        result$content <- content(req, "text")
         if (getOption("verbose")) { message("Server response:\n", result$content, "\n") }
-        if(is.null(result)) { return(NULL) }
-        result$headers <- headers$value()
-        result$status <- as.integer(result$headers[['status']])
-        result$statusMessage <- result$headers[['statusMessage']]
-        switch(.contentType(result$headers[['Content-Type']]),
+        result$headers <- headers(req)
+        result$status <- req$status_code
+        result$statusMessage <- http_status(req)$message
+    	switch(.contentType(result$headers),
                json = {
                    result$content <- fromJSON(result$content)
                    result$JSON <- TRUE
@@ -301,36 +316,37 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
                })
         return(result)
     } else if (accept.type == "binary") {
-        progress$start(NA_integer_)
+        if(show.progress) cat("Retrieving data...\n")
         result <- list(JSON = FALSE)
-        headers <- basicHeaderGatherer()
-        result$content <- getBinaryURL(paste(sep="", databaseUrl, apiCall),
-                verbose = getOption("verbose"),
-                headerfunction = headers$update,
-                noprogress = FALSE,
-                progressfunction = function(down, up) {up[which(up == 0)] <- NA; progress$update(down, up) },
-                httpheader = httpHeaderFields)
-        progress$end()
-        result$headers <- headers$value()
-        result$status <- as.integer(result$headers[['status']])
-        result$statusMessage <- result$headers[['statusMessage']]
-        if (getOption("verbose") && .contentType(result$headers[['Content-Type']]) %in% c('json', 'hal', 'html')) {
-            message("Server response:\n", result$content, "\n")
+        api.url <- paste(sep="", databaseUrl, apiCall)
+        if (is.null(post.body)) {
+            req <- GET(api.url,
+                       add_headers(httpHeaderFields),
+                       authenticate(clientId, clientSecret),
+                       if(show.progress) progress(),
+                       config(verbose = getOption("verbose")))
+        } else {
+            req <- POST(api.url,
+                        body = post.body,
+                        add_headers(httpHeaderFields),
+                        authenticate(clientId, clientSecret),
+                        if(show.progress) progress(),
+                        encode='form',
+                        config(verbose = getOption("verbose")))
         }
-        return(result)
+        if(show.progress) cat("\nDownload complete.\n")
+        result$content <- content(req, "raw")
+        result$headers <- headers(req)
+        result$status <- req$status_code
+        result$statusMessage <- http_status(req)$message
+        # even though we asked for binary the server may have returned something else
+        # (e.g. an error message)
+        if (getOption("verbose") && .contentType(result$headers) %in% c('json', 'hal', 'html')) {
+        	message("Server response:\n", result$content, "\n")
+        }
+    	return(result)
     }
     return(NULL)
-}
-
-# plain function
-.make.progresscallback.download <- function() {
-    start <- function(.total) cat("Retrieving data: \n")
-    update <- function(current, .total) {
-        # This trick unfortunately doesn't work in RStudio if we write to stderr.
-        cat(paste("\r", format(current / 1000000, digits=3, nsmall=3), "MB downloaded."))
-    }
-    end <- function() cat("\nDownload complete.\n")
-    environment()
 }
 
 
@@ -366,6 +382,7 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
 
 # this function is needed for .listToDataFrame to recursively replace NULL
 # values with NA, otherwise, unlist() will exclude those values.
+# plain function
 .recursiveReplaceNullWithNa <- function(list) {
     if (length(list) == 0) return(list())
     for (i in 1:length(list)) {
@@ -396,4 +413,12 @@ function(apiCall, httpHeaderFields, accept.type = "default", progress = .make.pr
         }
     }
     return(halList)
+}
+
+# plain function
+.list2string <- function(lst) {
+    if(is.null(names(lst))) return(paste(lst, sep=", "))
+
+    final <- character(length(lst)*2)
+    paste(mapply(function(name, val) {paste0(name, ': "', encodeString(val), '"')}, names(lst), lst), collapse=", ")
 }
