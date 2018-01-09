@@ -23,12 +23,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 connectToTransmart <- 
-function (transmartDomain, use.authentication = TRUE, token = NULL, .access.token = NULL, ...) {
+function (transmartDomain, use.authentication = TRUE, token = NULL, .access.token = NULL, apiPrefix = NULL, ...) {
     if (!exists("transmartClientEnv") || transmartClientEnv$transmartDomain != transmartDomain) { 
         assign("transmartClientEnv", new.env(parent = .GlobalEnv), envir = .GlobalEnv)
     }
 
     transmartClientEnv$transmartDomain <- transmartDomain
+    transmartClientEnv$apiPrefix <- apiPrefix
     transmartClientEnv$db_access_url <- transmartClientEnv$transmartDomain
     if (!is.null(token)) {
         transmartClientEnv$refresh_token <- token
@@ -94,12 +95,17 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
     }
 
     oauth.exchange.token.path <- "/oauth/token"
-    post.body <- list(
-        grant_type="authorization_code",
-        code=request.token,
-        redirect_uri=paste(transmartClientEnv$oauthDomain, "/oauth/verify", sep=""))
+    oauth.exchange.token.params <- paste(
+        "grant_type=authorization_code",
+        "client_id=api-client",
+        "client_secret=api-client",
+        paste("code=", request.token, sep=""),
+        paste("redirect_uri=", transmartClientEnv$oauthDomain, "/oauth/verify", sep=""),
+        sep="&"
+    )
+    oauth.exchange.token.request = paste(oauth.exchange.token.path, oauth.exchange.token.params, sep="?")
 
-    oauthResponse <- .transmartServerPostOauthRequest(oauth.exchange.token.path, "Authentication", post.body)
+    oauthResponse <- .transmartServerPostOauthRequest(oauth.exchange.token.request, "Authentication", list())
     if (is.null(oauthResponse)) return(FALSE)
 
     list2env(oauthResponse$content, envir = transmartClientEnv)
@@ -137,7 +143,7 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
     oauthResponse <- .transmartServerGetRequest(path, onlyContent=F, post.body=post.body)
     statusString <- paste("status code ", oauthResponse$status, ": ", oauthResponse$headers[['statusMessage']], sep='')
     if (!oauthResponse$JSON) {
-        cat(action, " failed, could not parse server response of type ", oauthResponse$headers[['Content-Type']], ". ", statusString, "\n", sep='')
+        cat(action, " failed, could not parse server response of type ", oauthResponse$headers$`content-type`, ". ", statusString, "\n", sep='')
         return(NULL)
     }
     if ('error' %in% names(oauthResponse$content)) {
@@ -210,7 +216,39 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
     }
 }
 
-.transmartGetJSON <- function(apiCall, ...) { .transmartServerGetRequest(apiCall, ensureJSON = TRUE, accept.type = "hal", ...) }
+.transmartGetApiPrefix <- function() {
+    if (exists("apiPrefix", envir = transmartClientEnv)) {
+        apiPrefix <- transmartClientEnv$apiPrefix
+    } else {
+        apiPrefix <- NULL
+    }
+    if (is.null(apiPrefix)) {
+        apiPrefix <- ""
+        if (getOption("verbose")) {
+            message("Checking availability of the v1 API version. ")
+        }
+        api.versions <- .transmartServerGetRequest("/versions/v1", accept.type = "default", onlyContent = F)
+        if (api.versions$status == 200 && api.versions$JSON) {
+            if ("prefix" %in% names(api.versions$content)) {
+                apiPrefix <- api.versions$content[["prefix"]]
+            }
+        }
+        transmartClientEnv$apiPrefix <- apiPrefix
+    }
+    if (getOption("verbose")) {
+        message(paste("Using API prefix: ", apiPrefix, sep=""))
+    }
+    apiPrefix
+}
+
+.transmartGetJSON <- function(apiCall, noPrefix = FALSE, ...) {
+    if (noPrefix) {
+        apiPrefix <- ""
+    } else {
+        apiPrefix <- .transmartGetApiPrefix()
+    }
+    .transmartServerGetRequest(paste(apiPrefix, apiCall, sep=''), ensureJSON = TRUE, accept.type = "hal", ...)
+}
 
 # If you just want a result, use the default parameters. If you want to do your own error handling, call with
 # onlyContent = NULL, this will return a list with data, headers and status code.
@@ -241,7 +279,7 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
             return(errorHandler(errmsg, result))
         }
         if(ensureJSON && !result$JSON) {
-            return(errorHandler(paste("No JSON returned but", result$headers[['Content-Type']]), result))
+            return(errorHandler(paste("No JSON returned but type", result$headers$`content-type`), result))
         }
         return(result$content)
     }
@@ -252,7 +290,7 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
     if(! 'content-type' %in% names(headers)) {
         return('content-type header not found')
     }
-    h <- headers[['content-type']]
+    h <- headers$`content-type`
     if(grepl("^application/json(;|\\W|$)", h)) {
         return('json')
     }
@@ -263,6 +301,11 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
         return('html')
     }
     return('unknown')
+}
+
+# Wrap this in case we need to change json libraries again
+.fromJSON <- function(json) {
+	fromJSON(json, simplifyDataFrame=F, simplifyMatrix=F)
 }
 
 .serverMessageExchange <- 
@@ -294,11 +337,11 @@ function(apiCall, httpHeaderFields, accept.type = "default", post.body = NULL, s
         result$statusMessage <- http_status(req)$message
     	switch(.contentType(result$headers),
                json = {
-                   result$content <- fromJSON(result$content)
+                   result$content <- .fromJSON(result$content)
                    result$JSON <- TRUE
                },
                hal = {
-                   result$content <- .simplifyHalList(fromJSON(result$content))
+                   result$content <- .simplifyHalList(.fromJSON(result$content))
                    result$JSON <- TRUE
                })
         return(result)
