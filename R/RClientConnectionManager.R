@@ -23,12 +23,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 connectToTransmart <- 
-function (transmartDomain, use.authentication = TRUE, token = NULL, .access.token = NULL, apiPrefix = NULL, ...) {
+function (transmartDomain, api_version = "1", use.authentication = TRUE, token = NULL, .access.token = NULL, apiPrefix = NULL, ...) {
     if (!exists("transmartClientEnv") || transmartClientEnv$transmartDomain != transmartDomain) { 
         assign("transmartClientEnv", new.env(parent = .GlobalEnv), envir = .GlobalEnv)
     }
-
+    
     transmartClientEnv$transmartDomain <- transmartDomain
+    transmartClientEnv$apiVersion = api_version
     transmartClientEnv$apiPrefix <- apiPrefix
     transmartClientEnv$db_access_url <- transmartClientEnv$transmartDomain
     if (!is.null(token)) {
@@ -227,7 +228,12 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
         if (getOption("verbose")) {
             message("Checking availability of the v1 API version. ")
         }
-        api.versions <- .transmartServerGetRequest("/versions/v1", accept.type = "default", onlyContent = F)
+        if (transmartClientEnv$apiVersion == "1") {
+            api.versions <- .transmartServerGetRequest("/versions/v1", accept.type = "default", onlyContent = F)
+        } else {
+            api.versions <- .transmartServerGetRequest("/versions/v2", accept.type = "default", onlyContent = F)
+            transmartClientEnv$apiVersion = "2"
+        }
         if (api.versions$status == 200 && api.versions$JSON) {
             if ("prefix" %in% names(api.versions$content)) {
                 apiPrefix <- api.versions$content[["prefix"]]
@@ -241,6 +247,7 @@ function (oauthDomain = transmartClientEnv$transmartDomain, prefetched.request.t
     apiPrefix
 }
 
+    #TODO: V2 doesn't use HAL, while V1 calls exclusivly use HAL. Parsing and requesting needs to be adjusted to support only JSON. Changing accept.type to JSON also results in error. Calls also need to be added to the V2 calls.
 .transmartGetJSON <- function(apiCall, noPrefix = FALSE, ...) {
     if (noPrefix) {
         apiPrefix <- ""
